@@ -316,6 +316,9 @@ TERMINAL := gnome-terminal
 dbg4ec: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 	$(V)$(QEMU) -S -s -parallel stdio $(QEMUOPTS) -serial null
 
+gdb: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
+	$(V)$(QEMU) -S -s -parallel stdio $(QEMUOPTS) -serial null &
+
 debug: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 	$(V)$(QEMU) -S -s -parallel stdio $(QEMUOPTS) -serial null &
 	$(V)sleep 2
