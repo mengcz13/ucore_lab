@@ -82,16 +82,19 @@ class scheduler:
         if pid != -1:
             self.curr_proc = pid
             self.move_to_running(STATE_READY)
+            self.check_if_done()
             return
         for pid in range(self.curr_proc + 1, len(self.proc_info)):
             if self.proc_info[pid][PROC_STATE] == STATE_READY:
                 self.curr_proc = pid
                 self.move_to_running(STATE_READY)
+                self.check_if_done()
                 return
         for pid in range(0, self.curr_proc + 1):
             if self.proc_info[pid][PROC_STATE] == STATE_READY:
                 self.curr_proc = pid
                 self.move_to_running(STATE_READY)
+                self.check_if_done()
                 return
         return
 
@@ -150,7 +153,7 @@ class scheduler:
         # init statistics
         cpu_busy = 0
 
-        while self.get_num_active() > 0:
+        while 1:
             clock_tick += 1
             
             # if current proc is RUNNING and has an instruction, execute it
@@ -162,6 +165,8 @@ class scheduler:
                 instruction_to_execute = self.proc_info[self.curr_proc][PROC_CODE].pop(0)
                 cpu_busy += 1
 
+            # self.check_if_done()
+
             # OUTPUT: print what everyone is up to
             print '%3d ' % clock_tick,
             for pid in range(len(self.proc_info)):
@@ -172,15 +177,20 @@ class scheduler:
 
             print ''
 
+            if self.get_num_active() == 0:
+                break
+
             # if this is an YIELD instruction, switch to ready state
             # and add an io completion in the future
             if instruction_to_execute == DO_YIELD:
                 #YOUR CODE
                 self.move_to_ready(STATE_RUNNING)
                 self.next_proc()
+            else:
+                self.check_if_done()
 
             # ENDCASE: check if currently running thing is out of instructions
-            self.check_if_done()
+            # self.check_if_done()
         return (clock_tick)
         
 #
