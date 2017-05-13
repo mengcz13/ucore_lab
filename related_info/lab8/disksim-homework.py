@@ -35,7 +35,7 @@ STATE_DONE   = 4
 class Disk:
     def __init__(self, addr, addrDesc, lateAddr, lateAddrDesc,
                  policy, seekSpeed, rotateSpeed, skew, window, compute,
-                 graphics, zoning):
+                 graphics, zoning, initArmTrack):
         self.addr              = addr
         self.addrDesc          = addrDesc
         self.lateAddr          = lateAddr
@@ -48,6 +48,7 @@ class Disk:
         self.compute           = compute
         self.graphics          = graphics
         self.zoning            = zoning
+        self.armTrack          = initArmTrack
 
         # figure out zones first, to figure out the max possible request
         self.InitBlockLayout()
@@ -132,7 +133,7 @@ class Disk:
             self.spindleID = self.canvas.create_oval(self.spindleX-3, self.spindleY-3, self.spindleX+3, self.spindleY+3, fill='orange', outline='black')
 
         # DISK ARM
-        self.armTrack     = 0
+        self.armTrack     = self.armTrack
         self.armSpeedBase = float(seekSpeed)
         self.armSpeed     = float(seekSpeed)
 
@@ -525,6 +526,65 @@ class Disk:
         assert(trackList != [])
         return trackList
 
+    def DoCLOOK(self, rList):
+        # Max -> Min
+        minBlock = -1
+        minIndex = -1
+        minEst = -1
+        outTrack = -1
+        outBlock = -1
+        outIndex = -1
+
+        # print '**** DoSATF ****', rList
+        for (block, index) in rList:
+            if self.requestState[index] == STATE_DONE:
+                continue
+            track = self.blockToTrackMap[block]
+            # angle = self.blockToAngleMap[block]
+            # print 'track', track, 'angle', angle
+
+            # estimate seek time
+            dist = int(math.fabs(self.armTrack - track))
+            seekEst = Decimal(self.trackWidth / self.armSpeedBase) * dist
+
+            # estimate rotate time
+            # angleOffset = self.blockAngleOffset[track]
+            # angleAtArrival = (Decimal(self.angle) + (seekEst * self.rotateSpeed))
+            # while angleAtArrival > 360.0:
+            #     angleAtArrival -= 360.0
+            # rotDist = Decimal((angle - angleOffset) - angleAtArrival)
+            # while rotDist > 360.0:
+            #     rotDist -= Decimal(360.0)
+            # while rotDist < 0.0:
+            #     rotDist += Decimal(360.0)
+            # rotEst = rotDist / self.rotateSpeed
+
+            # finally, transfer
+            # xferEst = (Decimal(angleOffset) * Decimal(2.0)) / self.rotateSpeed
+
+            # totalEst = seekEst + rotEst + xferEst
+            totalEst = seekEst
+
+            if outTrack == -1 or track < outTrack:
+                outTrack, outBlock, outIndex = track, block, index
+
+            if track < self.armTrack:
+                continue
+
+            # should probably pick one on same track in case of a TIE
+            if minEst == -1 or totalEst < minEst:
+                minEst = totalEst
+                minBlock = block
+                minIndex = index
+                # END loop
+
+        # when done
+        self.totalEst = minEst
+        if minBlock == -1:
+            return (outBlock, outIndex)
+        else:
+            return (minBlock, minIndex)
+
     def UpdateWindow(self):
         if self.fairWindow == -1 and self.currWindow > 0 and self.currWindow < len(self.requestQueue):
             self.currWindow += 1
@@ -566,6 +626,8 @@ class Disk:
             trackList = self.DoSSTF(self.requestQueue[0:self.GetWindow()])
             # then, do SATF on those blocks (otherwise, will not do them in obvious order)
             (self.currentBlock, self.currentIndex) = self.DoSATF(trackList)
+        elif self.policy == 'CLOOK':
+            (self.currentBlock, self.currentIndex) = self.DoCLOOK(self.requestQueue[0:self.GetWindow()])
         else:
             print 'policy (%s) not implemented' % self.policy
             sys.exit(1)
@@ -685,6 +747,7 @@ parser.add_option('-G', '--graphics',        default=False,       help='Turn on 
 parser.add_option('-l', '--lateAddr',        default='-1',        help='Late: request list (comma-separated) [-1 -> random]',     action='store', type='string', dest='lateAddr')
 parser.add_option('-L', '--lateAddrDesc',    default='0,-1,0',    help='Num requests, max request (-1->all), min request',        action='store', type='string', dest='lateAddrDesc')
 parser.add_option('-c', '--compute',         default=False,       help='Compute the answers',                                     action='store_true',           dest='compute')
+parser.add_option('-i', '--initArmTrack',    default=0,           help='Set initial position of arm track',                       action='store', type='int',    dest='initArmTrack')
 (options, args) = parser.parse_args()
 
 print 'OPTIONS seed', options.seed
@@ -700,6 +763,7 @@ print 'OPTIONS graphics', options.graphics
 print 'OPTIONS zoning', options.zoning
 print 'OPTIONS lateAddr', options.lateAddr
 print 'OPTIONS lateAddrDesc', options.lateAddrDesc
+print 'OPTIONS initArmTrack', options.initArmTrack
 print ''
 
 if options.window == 0:
@@ -713,7 +777,8 @@ if options.graphics and options.compute == False:
 # set up simulator info
 d = Disk(addr=options.addr, addrDesc=options.addrDesc, lateAddr=options.lateAddr, lateAddrDesc=options.lateAddrDesc,
          policy=options.policy, seekSpeed=Decimal(options.seekSpeed), rotateSpeed=Decimal(options.rotateSpeed),
-         skew=options.skew, window=options.window, compute=options.compute, graphics=options.graphics, zoning=options.zoning)
+         skew=options.skew, window=options.window, compute=options.compute, graphics=options.graphics, zoning=options.zoning,
+         initArmTrack=options.initArmTrack)
 
 # run simulation
 d.Go()
